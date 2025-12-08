@@ -1,0 +1,108 @@
+# -----------------------------
+# OS / Editor / Misc
+# -----------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+*.swp
+*.swo
+
+# -----------------------------
+# Node / Package managers
+# -----------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+# If you prefer to commit lockfile, remove the corresponding line above for your PM.
+
+# -----------------------------
+# Environment / Secrets
+# -----------------------------
+.env
+
+# -----------------------------
+# Testing / Coverage
+# -----------------------------
+coverage/
+*.lcov
+
+# -----------------------------
+# Vue (Vite or Vue CLI)
+# -----------------------------
+# Vite
+dist/
+vite.svg
+
+# Vue CLI (legacy)
+# If using Vue CLI, keep dist/ above; also exclude cache/temp
+.cache/
+temp/
+
+# -----------------------------
+# Electron Build Outputs
+# -----------------------------
+# electron-builder
+dist_electron/
+build/
+release/
+out/
+
+# electron-forge
+out/
+make/
+release/
+# forge cache
+.cache/
+
+# electron-packager
+# (often written to 'release' or 'out'; covered above)
+
+# -----------------------------
+# Binary artifacts
+# -----------------------------
+*.exe
+*.dmg
+*.AppImage
+*.snap
+*.deb
+*.rpm
+*.msi
+*.pkg
+*.asar
+
+# -----------------------------
+# Logs / Runtime
+# -----------------------------
+logs/
+*.log
+*.pid
+*.seed
+pids/
+
+# -----------------------------
+# OS-specific temporary files
+# -----------------------------
+ehthumbs.db
+Icon?
+desktop.ini
+
+# -----------------------------
+# Cache (common tools)
+# -----------------------------
+.cache/
+.tmp/
+temp/
+tmp/
+
+# -----------------------------
+# Storybook / Docs (optional)
+# -----------------------------
+storybook-static/
+docs/.vuepress/dist/
