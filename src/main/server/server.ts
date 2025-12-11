@@ -6,17 +6,18 @@ import http from 'http';
 import { Server as IOServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import path from 'node:path';
-import { initDb } from './db';
+import { initDb, resetDb } from './db';
 import { authRoutes } from './auth';
 import { messageRoutes } from './messages';
+import { requireAuth } from './auth-middleware'
 
 export const SERVER_PORT = Number(process.env.SERVER_PORT || 3900);
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
 export function startServer(dbRootDir: string) {
   const dbDir = path.resolve(dbRootDir);
+  // resetDb(dbDir);
   const db = initDb(dbDir);
-
   const app = express();
 
   // In dev, this is okay. If you use cookies/credentials, configure { origin, credentials }.
@@ -26,6 +27,43 @@ export function startServer(dbRootDir: string) {
   app.use('/api/auth', authRoutes(db, JWT_SECRET));
   app.use('/api/messages', messageRoutes(db, JWT_SECRET));
   app.get('/health', (_req, res) => res.status(200).json({ ok: true }));
+
+  app.get('/api/users', (req, res) => {
+    const q = String(req.query?.q ?? '').trim()
+    const where = q ? `WHERE display_name LIKE $q OR email LIKE $q` : ''
+    const sql = `
+      SELECT id, email, display_name, birth_date, created_at
+      FROM users
+      ${where}
+      ORDER BY created_at DESC
+      LIMIT 50
+    `
+    const params = q ? { $q: `%${q}%` } : {}
+
+    db.all(sql, params, (err: Error | null, rows: any[]) => {
+      if (err) return res.status(500).json({ error: err.message })
+      res.status(200).json(rows ?? [])
+    })
+  })
+
+  app.get('/api/messages', requireAuth(JWT_SECRET), (req, res) => {
+    const room = String(req.query?.room ?? '').trim()
+    if (!room) return res.status(400).json({ error: 'room required' })
+
+    const sql = `
+      SELECT m.id, m.room, m.sender_id, m.content, m.created_at,
+            u.display_name, u.email
+      FROM messages m
+      JOIN users u ON u.id = m.sender_id
+      WHERE m.room = $room
+      ORDER BY m.created_at ASC, m.id ASC
+      LIMIT 200
+    `
+    db.all(sql, { $room: room }, (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message })
+      res.json(rows)
+    })
+  })
 
   const server = http.createServer(app);
 

@@ -5,6 +5,9 @@ type SignupPayload = { email: string; password: string; displayName?: string };
 
 const api = {
   signup: (payload: SignupPayload) => ipcRenderer.invoke('signup', payload),
+  users: {
+    list: (query?: string) => ipcRenderer.invoke('users:list', query ?? ''),
+  }
 };
 
 // Expose only your app API. No external imports → no sandbox runtime errors.
