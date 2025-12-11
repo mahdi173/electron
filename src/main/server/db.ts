@@ -17,7 +17,8 @@ export function initDb(dbDir: string) {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
-        display_name TEXT,
+        display_name TEXT NOT NULL UNIQUE,
+        birth_date DATE NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -35,4 +36,11 @@ export function initDb(dbDir: string) {
   });
 
   return db;
+}
+
+export function resetDb(dbDir: string) {
+  const dbPath = path.join(dbDir, "db.sqlite");
+  if (fs.existsSync(dbPath)) {
+    fs.unlinkSync(dbPath);
+  }
 }
