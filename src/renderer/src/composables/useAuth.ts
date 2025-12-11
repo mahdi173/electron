@@ -1,123 +1,137 @@
 
 // src/renderer/src/composables/useAuth.ts
-import { ref, computed } from 'vue';
-import { useRouter } from 'vue-router';
-import api from '@renderer/services/api';
-import { session, saveSession } from '@renderer/store/session';
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import api from '@renderer/services/api'
+import { useSessionStore } from '@renderer/store/session'
 
-type Mode = 'login' | 'signup';
+type Mode = 'login' | 'signup'
 
 type User = {
-  email: string;
-  password: string;
-  username?: string;
-  birthDate?: string;
-};
+  email: string
+  password: string
+  username?: string
+  birthDate?: string // yyyy-mm-dd
+}
+
+/** Error message extractor (Axios or generic errors) */
+function getErrorMessage(e: unknown, fallback: string): string {
+  const anyErr = e as any
+  return (
+    anyErr?.response?.data?.error ||
+    anyErr?.response?.data?.message ||
+    anyErr?.message ||
+    fallback
+  )
+}
+
+/** Validators */
+const isEmailValid = (email: string) => /\S+@\S+\.\S+/.test(email)
+const isPasswordValid = (pwd: string) => typeof pwd === 'string' && pwd.length >= 6
+const isUsernameValid = (name?: string) => !!name && /^[A-Za-z0-9_]{3,30}$/.test(name)
+
+const isBirthValidAnd13Plus = (birth?: string) => {
+  if (!birth) return false
+  const d = new Date(birth)
+  if (Number.isNaN(d.getTime())) return false
+  const today = new Date()
+  let age = today.getFullYear() - d.getFullYear()
+  const m = today.getMonth() - d.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--
+  return age >= 13
+}
 
 export function useAuth(mode: Mode, user: User) {
-  const router = useRouter();
-  const loading = ref(false);
-  const error = ref('');
+  const router = useRouter()
+  const sessionStore = useSessionStore()
+
+  // state
+  const loading = ref(false)
+  const error = ref('')
 
   // field-level errors
-  const emailError = ref('');
-  const passwordError = ref('');
-  const usernameError = ref('');
-  const birthError = ref('');
+  const emailError = ref('')
+  const passwordError = ref('')
+  const usernameError = ref('')
+  const birthError = ref('')
 
-  const isEmailValid = (email: string) => /\S+@\S+\.\S+/.test(email);
-  const isPasswordValid = (pwd: string) => typeof pwd === 'string' && pwd.length >= 6;
-  const isUsernameValid = (name?: string) => !!name && /^[A-Za-z0-9_]{3,30}$/.test(name);
-
-  const isBirthValidAnd13Plus = (birth?: string) => {
-    if (!birth) return false;
-    const d = new Date(birth);
-    if (Number.isNaN(d.getTime())) return false;
-    const today = new Date();
-    let age = today.getFullYear() - d.getFullYear();
-    const m = today.getMonth() - d.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
-    return age >= 13;
-  };
-
+  // UI-only helper (does not block submit)
   const canSubmit = computed(() => {
-    // used only for UI feedback if needed; we no longer disable the button with it
-    const okEmail = isEmailValid(user.email);
-    const okPwd = isPasswordValid(user.password);
-    if (mode === 'login') return okEmail && okPwd;
-    return okEmail && okPwd && isUsernameValid(user.username) && isBirthValidAnd13Plus(user.birthDate);
-  });
+    const okEmail = isEmailValid(user.email)
+    const okPwd = isPasswordValid(user.password)
+    if (mode === 'login') return okEmail && okPwd
+    return okEmail && okPwd && isUsernameValid(user.username) && isBirthValidAnd13Plus(user.birthDate)
+  })
 
   function clearFieldErrors() {
-    emailError.value = '';
-    passwordError.value = '';
-    usernameError.value = '';
-    birthError.value = '';
+    emailError.value = ''
+    passwordError.value = ''
+    usernameError.value = ''
+    birthError.value = ''
   }
 
   function validateFields(): boolean {
-    clearFieldErrors();
-    let ok = true;
+    clearFieldErrors()
+    let ok = true
 
     if (!isEmailValid(user.email)) {
-      emailError.value = 'Please enter a valid email address.';
-      ok = false;
+      emailError.value = 'Please enter a valid email address.'
+      ok = false
     }
     if (!isPasswordValid(user.password)) {
-      passwordError.value = 'Password must be at least 6 characters.';
-      ok = false;
+      passwordError.value = 'Password must be at least 6 characters.'
+      ok = false
     }
     if (mode === 'signup') {
       if (!isUsernameValid(user.username)) {
-        usernameError.value = 'Username must be 3–30 chars (letters, numbers, underscores).';
-        ok = false;
-      } 
+        usernameError.value = 'Username must be 3–30 chars (letters, numbers, underscores).'
+        ok = false
+      }
       if (!isBirthValidAnd13Plus(user.birthDate)) {
-        birthError.value = 'You must be at least 13 years old.';
-        ok = false;
+        birthError.value = 'You must be at least 13 years old.'
+        ok = false
       }
     }
-    return ok;
+    return ok
   }
 
   async function submit() {
-    if (loading.value) return;
-    error.value = '';
+    if (loading.value) return
+    error.value = ''
 
-    const valid = validateFields();
-    if (!valid) return;
+    if (!validateFields()) return
 
-    loading.value = true;
-
+    loading.value = true
     try {
+      type AuthResponse = { token: string; user: unknown }
+      let data: AuthResponse
+
       if (mode === 'login') {
-        const { data } = await api.post('/auth/login', {
+        const res = await api.post<AuthResponse>('/auth/login', {
           email: user.email,
           password: user.password,
-        });
-        session.token = data.token;
-        session.user = data.user;
-        saveSession();
+        })
+        data = res.data
       } else {
-        const { data } = await api.post('/auth/signup', {
+        const res = await api.post<AuthResponse>('/auth/signup', {
           email: user.email,
           password: user.password,
           displayName: user.username,
           birthDate: user.birthDate,
-        });
-        session.token = data.token;
-        session.user = data.user;
-        saveSession();
+        })
+        data = res.data
       }
 
-      await router.push({ name: 'home' });
-    } catch (e: any) {
-      error.value =
-        e?.response?.data?.error ||
-        e?.message ||
-        (mode === 'login' ? 'Login failed' : 'Signup failed');
+      // Save to Pinia + persist
+      sessionStore.token = data.token
+      sessionStore.user = data.user as any
+      sessionStore.save()
+
+      await router.push({ name: 'home' })
+    } catch (e) {
+      error.value = getErrorMessage(e, mode === 'login' ? 'Login failed' : 'Signup failed')
     } finally {
-      loading.value = false;
+      loading.value = false
     }
   }
 
@@ -130,9 +144,12 @@ export function useAuth(mode: Mode, user: User) {
     passwordError,
     usernameError,
     birthError,
-    // optional derived
+    // derived
     canSubmit,
     // actions
     submit,
-  };
+    // utilities (optional)
+    validateFields,
+    clearFieldErrors,
+  }
 }
