@@ -22,12 +22,23 @@
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
-    "@electron-toolkit/utils": "^4.0.0"
+    "@electron-toolkit/utils": "^4.0.0",
+    "axios": "^1.13.2",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "sqlite3": "^5.1.7",
+    "vue-router": "^4.6.3"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "3.0.0",
     "@electron-toolkit/eslint-config-ts": "^3.1.0",
     "@electron-toolkit/tsconfig": "^2.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.19.1",
     "@vitejs/plugin-vue": "^6.0.2",
     "electron": "^39.2.6",
