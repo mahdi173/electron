@@ -1,9 +1,44 @@
 
 <template>
   <v-container class="chat-root pa-0" fluid>
+    <!-- Desktop sidebar -->
+    <div class="sidebar d-none d-md-block">
+      <ChatSidebar
+        :peers="peers"
+        :active-user-id="userIdParam"
+        :unread-by-room="chat.unreadByRoom"
+        :me-id="currentUserId"
+        :loading="false"
+      />
+    </div>
+
+    <!-- Mobile drawer -->
+    <v-navigation-drawer
+      v-model="sidebarOpen"
+      location="left"
+      temporary
+      class="d-md-none"
+      width="300"
+      :scrim="false"
+    >
+      <ChatSidebar
+        :peers="peers"
+        :active-user-id="userIdParam"
+        :unread-by-room="chat.unreadByRoom"
+        :me-id="currentUserId"
+        :loading="false"
+      >
+        <template #actions>
+          <v-btn icon="mdi-close" variant="text" @click="sidebarOpen = false" />
+        </template>
+      </ChatSidebar>
+    </v-navigation-drawer>
+
     <!-- Header -->
-    <v-sheet class="d-flex align-center px-4 py-3 border-b" color="surface">
-      <v-btn icon="mdi-arrow-left" variant="text" @click="goBack" class="mr-3" />
+    <v-sheet class="d-flex align-center px-4 py-3 border-b header" color="surface">
+      <!-- Mobile: open drawer -->
+      <v-btn class="mr-2 d-md-none" icon="mdi-menu" variant="text" @click="sidebarOpen = true" />
+      <v-btn icon="mdi-arrow-left" variant="text" @click="goBack" class="mr-3 d-none d-md-inline-flex" />
       <div class="d-flex flex-column">
         <span class="text-subtitle-1 font-weight-medium">
           Chat with user: {{ otherName }}
@@ -97,6 +132,9 @@ import { storeToRefs } from 'pinia'
 import { useSessionStore } from '@renderer/store/session'
 import { useChatStore } from '@renderer/store/chat'
 import MessageBubble from '@renderer/components/MessageBubble.vue'
+import ChatSidebar from '@renderer/components/ChatSidebar.vue'
+import { useDisplay } from 'vuetify'
+import { useUsersStore } from '@renderer/store/user'
 
 const API_BASE = 'http://localhost:3900'
 
@@ -107,6 +145,7 @@ const session = useSessionStore()
 const chat = useChatStore()
 const { token, user: me } = storeToRefs(session)
 const { connecting, connected, loading, error, messagesByRoom } = storeToRefs(chat)
+const usersStore = useUsersStore()
 
 /** Helpers */
 const normalizeId = (v: unknown) => {
@@ -147,6 +186,10 @@ const sending = ref(false)
 const canSend = computed(() =>
   connected.value && draft.value.trim().length > 0 && !!room.value && !sending.value
 )
+
+// Sidebar behavior
+const { mdAndUp } = useDisplay()
+const sidebarOpen = ref(mdAndUp.value)
 
 /** Navigation */
 function goHome() { router.push({ name: 'home' }) }
@@ -223,12 +266,60 @@ watch(room, async (newRoom, oldRoom) => {
   }
 })
 
+//sideBar
+watch(mdAndUp, v => { sidebarOpen.value = v })
+
+
+function dmRoomFor(a: number, b: number) {
+  if (!a || !b) return ''
+  const [min, max] = [Math.min(a, b), Math.max(a, b)]
+  return `dm:${min}:${max}`
+}
+
+const peers = computed(() => {
+  const meId = currentUserId.value
+  const base = usersStore.usersExcept(meId)
+
+  const toItem = (u: { id: number; displayName: string }) => {
+    const room = dmRoomFor(Number(meId), Number(u.id))
+    const list = room ? (messagesByRoom.value[room] ?? []) : []
+    const last = list[list.length - 1]
+    return {
+      id: u.id,
+      name: u.displayName,
+      lastPreview: last?.content ?? '',
+      lastAt: last?.createdAt ?? '',
+    }
+  }
+
+  const items = base.map(toItem)
+
+  // Sort: recent conversations first, then name
+  items.sort((a, b) => {
+    const ta = a.lastAt ? Date.parse(a.lastAt) : 0
+    const tb = b.lastAt ? Date.parse(b.lastAt) : 0
+    if (tb !== ta) return tb - ta
+    return a.name.localeCompare(b.name)
+  })
+
+  return items
+})
+
+
+// Clear unread on open/read (or gate by scroll-bottom if you prefer)
+watch(room, (newRoom) => { if (newRoom) chat.markRoomRead(newRoom) })
+watch(messages, () => { if (room.value) chat.markRoomRead(room.value) })
+
 onMounted(async () => {
   window.addEventListener('keydown', onKeyDown)
   await ensureSocket()
   await loadHistory()
   await joinRoom()
   scrollToBottom()
+  
+  if (!usersStore.fetchedOnce && token.value) {
+    await usersStore.fetchAll(API_BASE, token.value)
+  }
 })
 
 function onKeyDown(e: KeyboardEvent) { if (e.key === 'Escape') goBack() }
@@ -240,10 +331,35 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* Page layout only (bubble styles live in MessageBubble.vue) */
-.chat-root { height: 100%; display: grid; grid-template-rows: auto 1fr auto; }
+/* Page layout (bubble styles live in MessageBubble.vue) */
+.chat-root {
+  height: 100%;
+  display: grid;
+  grid-template-columns: 300px 1fr; /* sidebar + chat pane */
+  grid-template-rows: auto 1fr auto; /* header + messages + composer */
+}
+
+/* Sidebar spans the full height of the page grid */
+.sidebar {
+  grid-row: 1 / -1;  /* spans header, messages, composer */
+}
+
+/* Right column (chat pane) occupies column 2 */
+.header     { grid-column: 2; }
+.chat-scroll{ grid-column: 2; overflow-y: auto; overscroll-behavior: contain; }
+.composer   { grid-column: 2; backdrop-filter: saturate(180%) blur(6px); }
+
 .border-b { border-bottom: 1px solid rgba(0, 0, 0, 0.06); }
 .border-t { border-top: 1px solid rgba(0, 0, 0, 0.06); }
-.chat-scroll { overflow-y: auto; overscroll-behavior: contain; }
-.composer { backdrop-filter: saturate(180%) blur(6px); }
+
+/* Small screens: hide fixed sidebar; use temporary drawer */
+@media (max-width: 960px) {
+  .chat-root {
+    grid-template-columns: 1fr;       /* no fixed sidebar */
+    grid-template-rows: auto 1fr auto; /* header + messages + composer */
+  }
+  .header, .chat-scroll, .composer {
+    grid-column: 1;
+  }
+}
 </style>

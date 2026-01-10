@@ -84,6 +84,7 @@ export const useChatStore = defineStore('chat', {
     jwt: '' as string,
 
     pendingAckTimers: new Map<string, any>(), // tempId -> timeout
+    unreadByRoom: {} as Record<string, number>,
   }),
 
   getters: {
@@ -169,6 +170,10 @@ export const useChatStore = defineStore('chat', {
 
         // Else append as new incoming
         this.messagesByRoom[normalized.room] = dedupeAppend(list, normalized)
+        const isMine = this.currentUserId != null && Number(normalized.sender.id) === Number(this.currentUserId)
+        if (!isMine) {
+          this.incrementUnread(normalized.room)
+        }
       })
 
       // Sender-only ack
@@ -298,6 +303,15 @@ export const useChatStore = defineStore('chat', {
       this.jwt = ''
       for (const [, t] of this.pendingAckTimers) clearTimeout(t)
       this.pendingAckTimers.clear()
+      this.unreadByRoom = {}
+    },
+    incrementUnread(room: string) {
+      const prev = this.unreadByRoom[room] ?? 0
+      this.unreadByRoom[room] = prev + 1
+    },
+    markRoomRead(room: string) {
+      if (!room) return
+      this.unreadByRoom[room] = 0
     },
   },
 })
