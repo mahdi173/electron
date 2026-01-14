@@ -51,12 +51,6 @@
             {{ u.name }}
           </v-list-item-title>
 
-          <v-list-item-subtitle class="text-truncate">
-            <span :class="u.online ? 'text-success' : 'text-medium-emphasis'">
-              {{ u.online ? 'Online' : 'Offline' }}
-            </span>
-          </v-list-item-subtitle>
-
           <template #append>
             <v-badge
               v-if="unreadCount(u.id) > 0"
@@ -74,31 +68,23 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-
-interface Peer {
-  id: number
-  name: string
-  avatarUrl?: string
-  online?: boolean
-}
+import type { IPeer } from '@renderer/types/IPeer'
 
 const props = defineProps<{
-  peers: { id: number; name: string; lastPreview?: string; lastAt?: string }[]
+  peers: IPeer[]
   activeUserId?: number
   loading?: boolean
   unreadByRoom?: Record<string, number>
   meId?: number
 }>()
-
 const q = ref('')
 
 const filtered = computed(() => {
   const needle = q.value.trim().toLowerCase()
-  console.log(props.peers)
   if (!needle) return props.peers
   return props.peers.filter(u =>
-    [u.name, String(u.id)].some(s => s?.toLowerCase().includes(needle))
-  )
+  [u.name, String(u.id)].some(s => s?.toLowerCase().includes(needle))
+)
 })
 
 /** Room key helper consistent with Chat.vue (dm:min:max) */

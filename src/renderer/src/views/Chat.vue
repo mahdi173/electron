@@ -43,9 +43,6 @@
         <span class="text-subtitle-1 font-weight-medium">
           Chat with user: {{ otherName }}
         </span>
-        <span class="text-caption text-medium-emphasis" v-if="room">
-          Room: {{ room }}
-        </span>
       </div>
       <v-spacer />
       <v-chip v-if="connecting" label size="small" color="primary" variant="tonal" class="mr-2">

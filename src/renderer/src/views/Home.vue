@@ -190,7 +190,6 @@ async function fetchUsers() {
     const data = (await res.json()) as User[]
     users.value = Array.isArray(data) ? data : []
   } catch (e: any) {
-    console.error(e)
     error.value = e?.message ?? 'Failed to load users'
   } finally {
     loading.value = false
