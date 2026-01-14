@@ -48,7 +48,11 @@
           </template>
 
           <v-list-item-title class="text-truncate">
-            {{ u.name }}
+            <span>{{ u.name }}</span>
+            
+            <v-list-item-subtitle>
+              {{ u.lastPreview || 'No messages yet' }}
+            </v-list-item-subtitle>
           </v-list-item-title>
 
           <template #append>
