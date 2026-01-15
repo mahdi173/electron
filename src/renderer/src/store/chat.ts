@@ -1,29 +1,10 @@
-
-// src/stores/chat.ts
 import { defineStore } from 'pinia'
-import { io, type Socket } from 'socket.io-client'
+import type { IChatState } from '@renderer/types/IChatState'
+import type { IChatMessage } from '@renderer/types/IChatMessage'
+import { SocketManager } from '@renderer/classes/SocketManager'
 
-export type MsgSender = {
-  id: number
-  displayName?: string
-  email?: string
-}
-
-export type ChatMessage = {
-  id?: number
-  room: string
-  sender: MsgSender
-  content: string
-  createdAt: string
-  // client-only
-  _tempId?: string
-  _status?: 'sending' | 'sent' | 'error'
-}
-
-type MessagesByRoom = Record<string, ChatMessage[]>
-
-// --- helpers (inline to keep one file) ---
-const keyOf = (m: ChatMessage) =>
+// --- helpers (inline) ---
+const keyOf = (m: IChatMessage) =>
   m.id != null
     ? `id:${m.id}`
     : m._tempId
@@ -36,7 +17,7 @@ function hash(s: string): number {
   return h >>> 0
 }
 
-function dedupeAppend(list: ChatMessage[], incoming: ChatMessage): ChatMessage[] {
+function dedupeAppend(list: IChatMessage[], incoming: IChatMessage): IChatMessage[] {
   const idx = list.findIndex((x) => keyOf(x) === keyOf(incoming))
   if (idx >= 0) {
     const copy = list.slice()
@@ -47,7 +28,7 @@ function dedupeAppend(list: ChatMessage[], incoming: ChatMessage): ChatMessage[]
 }
 
 function findOptimisticIndex(
-  list: ChatMessage[],
+  list: IChatMessage[],
   opts: { tempId?: string; content?: string; senderId?: number }
 ): number {
   const { tempId, content, senderId } = opts
@@ -55,7 +36,6 @@ function findOptimisticIndex(
     const i = list.findIndex((m) => m._tempId === tempId)
     if (i >= 0) return i
   }
-  // Heuristic: last sending with same sender/content
   for (let i = list.length - 1; i >= 0; i--) {
     const m = list[i]
     if (m._status === 'sending') {
@@ -66,38 +46,39 @@ function findOptimisticIndex(
   }
   return -1
 }
+type InternalChatState = IChatState & { socketManager: any }
 
 // --- store ---
 export const useChatStore = defineStore('chat', {
-  state: () => ({
-    socket: null as Socket | null,
+  state: (): InternalChatState => ({
+    socketManager: new SocketManager() as any,
     connecting: false,
     connected: false,
     loading: false,
     error: null as string | null,
-
-    messagesByRoom: {} as MessagesByRoom,
-
-    currentUserId: null as number | null, // set from session or socket
-
-    apiBase: '' as string,
-    jwt: '' as string,
-
-    pendingAckTimers: new Map<string, any>(), // tempId -> timeout
-    unreadByRoom: {} as Record<string, number>,
+    messagesByRoom: {},
+    currentUserId: null,
+    apiBase: '',
+    jwt: '',
+    pendingAckTimers: new Map<string, ReturnType<typeof setTimeout>>(),
+    unreadByRoom: {},
   }),
 
   getters: {
     messagesForRoom: (state) => (room: string) => state.messagesByRoom[room] ?? [],
     messagesWithMeta:
       (state) =>
-      (room: string): (ChatMessage & { isMine: boolean })[] =>
+      (room: string): (IChatMessage & { isMine: boolean })[] =>
         (state.messagesByRoom[room] ?? []).map((m) => ({
           ...m,
-          isMine: state.currentUserId != null && m.sender?.id != null
-            ? Number(m.sender.id) === Number(state.currentUserId)
-            : false,
+          isMine:
+            state.currentUserId != null && m.sender?.id != null
+              ? Number(m.sender.id) === Number(state.currentUserId)
+              : false,
         })),
+    socket(state): SocketManager {
+      return state.socketManager
+    },
   },
 
   actions: {
@@ -121,19 +102,19 @@ export const useChatStore = defineStore('chat', {
         this.connected = false
       })
 
-      // Identify "me" early
-      
       this.socket.on('session:user', (u: { id: number; displayName?: string; email?: string }) => {
-        if (u?.id) this.setCurrentUserId(Number(u.id));
-      });
+        if (u?.id) this.setCurrentUserId(Number(u.id))
+      })
 
-
-      // Server echo
       this.socket.on('message:new', (raw: any) => {
-        const normalized: ChatMessage = {
+        const normalized: IChatMessage = {
           id: raw?.id,
           room: String(raw?.room),
-          sender: { id: Number(raw?.sender?.id ?? 0), displayName: raw?.sender?.displayName ?? '', email: raw?.sender?.email ?? '' },
+          sender: {
+            id: Number(raw?.sender?.id ?? 0),
+            displayName: raw?.sender?.displayName ?? '',
+            email: raw?.sender?.email ?? '',
+          },
           content: String(raw?.content ?? ''),
           createdAt: String(raw?.createdAt ?? new Date().toISOString()),
           _status: 'sent',
@@ -143,7 +124,6 @@ export const useChatStore = defineStore('chat', {
         const clientId = (raw?.clientId ?? raw?.tempId) as string | undefined
         const list = this.messagesByRoom[normalized.room] ?? []
 
-        // Try to upgrade optimistic
         const idx = findOptimisticIndex(list, {
           tempId: clientId,
           content: normalized.content,
@@ -168,20 +148,18 @@ export const useChatStore = defineStore('chat', {
           return
         }
 
-        // Else append as new incoming
         this.messagesByRoom[normalized.room] = dedupeAppend(list, normalized)
         const isMine = this.currentUserId != null && Number(normalized.sender.id) === Number(this.currentUserId)
-        if (!isMine) {
-          this.incrementUnread(normalized.room)
-        }
+        if (!isMine) this.incrementUnread(normalized.room)
       })
 
-      // Sender-only ack
       this.socket.on('message:sent:ack', (payload: { room: string; id: number; tempId?: string }) => {
         const list = this.messagesByRoom[payload.room] ?? []
         if (!list.length) return
 
-        const idx = list.findIndex((m) => (payload.tempId ? m._tempId === payload.tempId : m.id === payload.id))
+        const idx = list.findIndex((m) =>
+          payload.tempId ? m._tempId === payload.tempId : m.id === payload.id
+        )
         if (idx < 0) return
 
         const copy = list.slice()
@@ -207,9 +185,7 @@ export const useChatStore = defineStore('chat', {
       this.connecting = true
       this.error = null
 
-      const url = 'http://localhost:3900' // TODO: env/config
-      const socket = io(url, { transports: ['websocket'], auth: { token: jwt } })
-      this.socket = socket
+      this.socketManager.connect(jwt)
       this._attachSocketHandlers()
     },
 
@@ -234,10 +210,14 @@ export const useChatStore = defineStore('chat', {
         if (!res.ok) throw new Error(`Failed: ${res.status} ${res.statusText}`)
 
         const rows = (await res.json()) as any[]
-        const msgs: ChatMessage[] = rows.map((r) => ({
+        const msgs: IChatMessage[] = rows.map((r) => ({
           id: r.id,
           room: r.room,
-          sender: { id: Number(r.senderId ?? r.sender_id ?? r.user_id ?? 0), displayName: r.displayName ?? '', email: r.email ?? '' },
+          sender: {
+            id: Number(r.senderId ?? r.sender_id ?? r.user_id ?? 0),
+            displayName: r.displayName ?? '',
+            email: r.email ?? '',
+          },
           content: r.content,
           createdAt: r.createdAt ?? r.created_at ?? new Date().toISOString(),
           _status: 'sent',
@@ -258,7 +238,7 @@ export const useChatStore = defineStore('chat', {
       if (optimistic) {
         tempId = (crypto as any)?.randomUUID?.() ?? `tmp-${Date.now()}-${Math.random()}`
         const mineId = Number(this.currentUserId ?? -1)
-        const optimisticMsg: ChatMessage = {
+        const optimisticMsg: IChatMessage = {
           _tempId: tempId,
           _status: 'sending',
           room,
@@ -269,7 +249,6 @@ export const useChatStore = defineStore('chat', {
         const list = this.messagesByRoom[room] ?? []
         this.messagesByRoom[room] = dedupeAppend(list, optimisticMsg)
 
-        // Timeout to avoid infinite spinner
         const t = setTimeout(() => {
           const cur = this.messagesByRoom[room] ?? []
           const idx = cur.findIndex((m) => m._tempId === tempId)
@@ -292,7 +271,7 @@ export const useChatStore = defineStore('chat', {
 
     reset() {
       this.socket?.disconnect()
-      this.socket = null
+      this.socketManager = new SocketManager()
       this.connecting = false
       this.connected = false
       this.loading = false

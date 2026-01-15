@@ -6,7 +6,7 @@ import http from 'http';
 import { Server as IOServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import path from 'node:path';
-import { initDb, resetDb } from './db';
+import { initDb } from './db';
 import { authRoutes } from './auth';
 import { messageRoutes } from './messages';
 import { attachRealtime } from './realtime';

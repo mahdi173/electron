@@ -31,7 +31,6 @@ describe('Chat Store', () => {
   it('adds optimistic message when sending', async () => {
     store.connected = true
     store.currentUserId = 1
-    store.socket = { emit: vi.fn() } as any
 
     await store.sendMessage('room1', 'Hello', { optimistic: true })
     const msgs = store.messagesByRoom['room1']

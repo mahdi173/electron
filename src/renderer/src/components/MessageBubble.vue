@@ -32,10 +32,10 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ChatMessage } from '@renderer/store/chat'
+import type { IChatMessage } from '@renderer/types/IChatMessage'
 
 const props = defineProps<{
-  message: ChatMessage
+  message: IChatMessage
   mine: boolean
 }>()
 

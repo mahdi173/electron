@@ -22,6 +22,7 @@ router.beforeEach((to) => {
   if (!isAuthed && to.name !== 'login') {
     return { name: 'login', replace: true }
   }
+  return true;
 })
 
 export default router

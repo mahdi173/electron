@@ -10,5 +10,7 @@ export default defineConfig({
       'src/tests/**/*.{test,spec}.{ts,tsx,js,jsx}',
     ],
     globals: true,
+    setupFiles: [],
+    css: false,
   },
 })
